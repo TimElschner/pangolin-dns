@@ -61,7 +61,7 @@ Client DNS query: google.com
    PANGOLIN_API_KEY=your_api_key_id.your_api_key_secret
    ```
 
-2. Start the container (pulls the pre-built image from GHCR automatically):
+2. Start the container (pulls the pre-built image from Docker Hub automatically):
    ```bash
    docker compose up -d
    ```
