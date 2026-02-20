@@ -1,0 +1,15 @@
+services:
+  pangolin-dns:
+    build: .
+    container_name: pangolin-dns
+    restart: unless-stopped
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    environment:
+      - PANGOLIN_API_URL=http://10.1.100.2:3004
+      - PANGOLIN_API_KEY=${PANGOLIN_API_KEY}
+      - PANGOLIN_LOCAL_IP=10.1.100.2
+      - UPSTREAM_DNS=1.1.1.1:53
+      - POLL_INTERVAL=60s
+      - ENABLE_LOCAL_PREFIX=true

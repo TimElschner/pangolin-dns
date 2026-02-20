@@ -1,0 +1,9 @@
+# Auto Claude data directory
+.auto-claude/
+
+# Go
+pangolin-dns
+pangolin-dns.exe
+
+# Environment
+.env
