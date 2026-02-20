@@ -35,14 +35,14 @@ Client DNS query: google.com
 │  pangolin-dns                            │
 │                                          │
 │  ┌─────────────┐   ┌──────────────────┐  │
-│  │ DNS Server   │   │ Pangolin Poller  │  │
-│  │ (miekg/dns)  │   │ (HTTP client)    │  │
-│  │ :53 UDP/TCP  │   │ every 60s        │  │
-│  └──────┬───────┘   └────────┬─────────┘  │
-│         │  ┌─────────────┐   │             │
-│         └──│ Record Store │───┘             │
-│            │ (in-memory)  │                │
-│            └─────────────┘                 │
+│  │ DNS Server  │   │ Pangolin Poller  │  │
+│  │ (miekg/dns) │   │ (HTTP client)    │  │
+│  │ :53 UDP/TCP │   │ every 60s        │  │
+│  └──────┬──────┘   └────────┬─────────┘  │
+│         │  ┌────────────┐   │            │
+│         └──│ Rord Store │───┘            │
+│            │ (-memory)  │                │
+│            └────────────┘                │
 └──────────────────────────────────────────┘
 ```
 
