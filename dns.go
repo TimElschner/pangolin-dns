@@ -1,16 +1,20 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/miekg/dns"
 )
 
 type DNSServer struct {
-	cfg   *Config
-	store *RecordStore
+	cfg       *Config
+	store     *RecordStore
+	udpServer *dns.Server
+	tcpServer *dns.Server
 }
 
 func NewDNSServer(cfg *Config, store *RecordStore) *DNSServer {
@@ -72,24 +76,35 @@ func (s *DNSServer) forward(w dns.ResponseWriter, r *dns.Msg) {
 	w.WriteMsg(resp)
 }
 
-// ListenAndServe starts both UDP and TCP DNS listeners.
-func (s *DNSServer) ListenAndServe() error {
+// ListenAndServe starts both UDP and TCP DNS listeners and blocks until ctx is
+// cancelled or one of the servers returns an error.
+func (s *DNSServer) ListenAndServe(ctx context.Context) error {
 	addr := ":" + s.cfg.DNSPort
 
-	udpServer := &dns.Server{Addr: addr, Net: "udp", Handler: s}
-	tcpServer := &dns.Server{Addr: addr, Net: "tcp", Handler: s}
+	s.udpServer = &dns.Server{Addr: addr, Net: "udp", Handler: s}
+	s.tcpServer = &dns.Server{Addr: addr, Net: "tcp", Handler: s}
 
 	errCh := make(chan error, 2)
 
 	go func() {
 		log.Printf("dns: listening on %s/udp", addr)
-		errCh <- udpServer.ListenAndServe()
+		errCh <- s.udpServer.ListenAndServe()
 	}()
 
 	go func() {
 		log.Printf("dns: listening on %s/tcp", addr)
-		errCh <- tcpServer.ListenAndServe()
+		errCh <- s.tcpServer.ListenAndServe()
 	}()
 
-	return <-errCh
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		log.Println("dns: shutting down")
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		s.udpServer.ShutdownContext(shutCtx)
+		s.tcpServer.ShutdownContext(shutCtx)
+		return nil
+	}
 }

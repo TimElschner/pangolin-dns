@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"time"
 )
@@ -14,6 +15,7 @@ type Config struct {
 	UpstreamDNS       string
 	PollInterval      time.Duration
 	DNSPort           string
+	HealthPort        string
 	EnableLocalPrefix bool
 }
 
@@ -25,11 +27,16 @@ func LoadConfig() (*Config, error) {
 		PangolinOrgID:     os.Getenv("PANGOLIN_ORG_ID"),
 		UpstreamDNS:       envOrDefault("UPSTREAM_DNS", "1.1.1.1:53"),
 		DNSPort:           envOrDefault("DNS_PORT", "53"),
+		HealthPort:        envOrDefault("HEALTH_PORT", "8080"),
 		EnableLocalPrefix: envOrDefault("ENABLE_LOCAL_PREFIX", "true") == "true",
 	}
 
 	if cfg.PangolinAPIKey == "" {
 		return nil, fmt.Errorf("PANGOLIN_API_KEY is required")
+	}
+
+	if net.ParseIP(cfg.PangolinLocalIP) == nil {
+		return nil, fmt.Errorf("invalid PANGOLIN_LOCAL_IP: %q", cfg.PangolinLocalIP)
 	}
 
 	interval := envOrDefault("POLL_INTERVAL", "60s")

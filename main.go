@@ -22,16 +22,19 @@ func main() {
 	log.Printf("Upstream DNS: %s", cfg.UpstreamDNS)
 	log.Printf("Poll interval: %s", cfg.PollInterval)
 	log.Printf("Local prefix: %v", cfg.EnableLocalPrefix)
+	log.Printf("Health port: %s", cfg.HealthPort)
 
 	store := NewRecordStore()
 	poller := NewPoller(cfg, store)
 	dnsServer := NewDNSServer(cfg, store)
+	healthServer := NewHealthServer(cfg, poller, store)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start poller in background
+	// Start poller and health server in background
 	go poller.Run(ctx)
+	go healthServer.Run(ctx)
 
 	// Handle shutdown signals
 	go func() {
@@ -42,8 +45,8 @@ func main() {
 		cancel()
 	}()
 
-	// Start DNS server (blocks)
-	if err := dnsServer.ListenAndServe(); err != nil {
+	// Start DNS server (blocks until ctx cancelled or error)
+	if err := dnsServer.ListenAndServe(ctx); err != nil {
 		log.Fatalf("dns server: %v", err)
 	}
 }

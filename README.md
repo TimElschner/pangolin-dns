@@ -27,6 +27,7 @@ Client DNS query: google.com
 - **Upstream forwarding** — non-Pangolin domains are forwarded to a configurable upstream DNS
 - **Lightweight** — single static Go binary, ~10MB Docker image
 - **Zero config for domains** — no manual domain list needed, everything comes from Pangolin
+- **Health endpoint** — `GET /healthz` on port 8080 reports record count, last poll time and error count
 
 ## Architecture
 
@@ -40,8 +41,8 @@ Client DNS query: google.com
 │  │ :53 UDP/TCP │   │ every 60s        │  │
 │  └──────┬──────┘   └────────┬─────────┘  │
 │         │  ┌────────────┐   │            │
-│         └──│ Rord Store │───┘            │
-│            │ (-memory)  │                │
+│         └──│Record Store│───┘            │
+│            │ (in-memory)│                │
 │            └────────────┘                │
 └──────────────────────────────────────────┘
 ```
@@ -90,11 +91,141 @@ All configuration is done via environment variables:
 | `UPSTREAM_DNS` | `1.1.1.1:53` | Upstream DNS server for non-local queries |
 | `POLL_INTERVAL` | `60s` | How often to poll the Pangolin API |
 | `DNS_PORT` | `53` | DNS server listen port |
+| `HEALTH_PORT` | `8080` | HTTP health endpoint port |
 | `ENABLE_LOCAL_PREFIX` | `true` | Create `local.{domain}` entries |
+
+## Installation
+
+pangolin-dns runs as a Docker container on any host that is reachable from your LAN — typically the same machine as Pangolin itself.
+
+### 1. Create a `.env` file
+
+```
+PANGOLIN_API_KEY=your_api_key_id.your_api_key_secret
+```
+
+The API key is created in the Pangolin admin UI under **Settings → API Keys**. Use a root key to allow auto-discovery of all organizations, or set `PANGOLIN_ORG_ID` and use an org-scoped key.
+
+### 2. Adjust `docker-compose.yml` if needed
+
+The defaults assume Pangolin runs at `10.1.100.2`. If your setup differs, override the relevant variables:
+
+```yaml
+environment:
+  - PANGOLIN_API_URL=http://<your-pangolin-ip>:3004
+  - PANGOLIN_LOCAL_IP=<your-pangolin-ip>
+```
+
+### 3. Start the container
+
+```bash
+docker compose up -d
+```
+
+### 4. Verify it works
+
+```bash
+# Check the health endpoint
+curl http://<host-ip>:8080/healthz
+
+# Test DNS resolution (replace with one of your actual Pangolin domains)
+nslookup app.example.com <host-ip>
+```
+
+The health response looks like:
+```json
+{"status":"ok","records":12,"last_poll":"2026-02-20T19:00:00Z","poll_errors":0}
+```
+
+`records` should be > 0 after the first poll (within a few seconds of startup).
+
+---
 
 ## Network Setup
 
-To use pangolin-dns for your entire LAN, point your router's DNS setting to the IP of the machine running pangolin-dns. For example, in a UniFi setup, set the LAN DNS server to the Pangolin host IP.
+pangolin-dns only does something useful if your devices actually use it as their DNS resolver. You have two options:
+
+### Option A: Router / DHCP (recommended — affects all LAN clients automatically)
+
+Configure your router to hand out the pangolin-dns host IP as the DNS server via DHCP. New DHCP leases will pick it up immediately; existing clients will update on their next lease renewal (or after a reconnect).
+
+**UniFi (UDM / UDM Pro / USG):**
+
+1. Go to **Settings → Networks → [your LAN network] → Advanced**
+2. Under **DHCP Name Server**, select **Manual**
+3. Enter the IP of the host running pangolin-dns as DNS Server 1
+4. Optionally add `1.1.1.1` as DNS Server 2 as a fallback (pangolin-dns already forwards unknown queries upstream, so this is only needed if pangolin-dns itself goes down)
+5. Save — clients will receive the new DNS on their next DHCP renewal
+
+**pfSense / OPNsense:**
+
+1. Go to **Services → DHCP Server → [your LAN interface]**
+2. Set **DNS Servers** to the pangolin-dns host IP
+3. Save and apply
+
+**Generic router (most home routers):**
+
+Look for **LAN / DHCP Settings** and set the **Primary DNS** to the pangolin-dns host IP. The exact location varies by router brand.
+
+---
+
+### Option B: Per-device (useful for testing or single machines)
+
+Set the DNS server manually on the device you want to configure. pangolin-dns forwards all non-Pangolin queries upstream, so it is safe to use as your only DNS resolver.
+
+**Windows:**
+
+1. Open **Settings → Network & Internet → [your adapter] → Edit DNS**
+2. Switch to **Manual**, enable IPv4
+3. Set **Preferred DNS** to the pangolin-dns host IP
+4. Set **Alternate DNS** to `1.1.1.1` (fallback if pangolin-dns is unreachable)
+
+Or via PowerShell (replace `Ethernet` and the IP as needed):
+```powershell
+Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses "10.1.100.2","1.1.1.1"
+```
+
+**macOS:**
+
+1. Open **System Settings → Network → [your connection] → Details → DNS**
+2. Click **+** and add the pangolin-dns host IP
+3. Click OK and Apply
+
+Or via terminal:
+```bash
+# Replace "Wi-Fi" with your interface name from `networksetup -listallnetworkservices`
+networksetup -setdnsservers "Wi-Fi" 10.1.100.2 1.1.1.1
+```
+
+**Linux (systemd-resolved):**
+
+Edit `/etc/systemd/resolved.conf`:
+```ini
+[Resolve]
+DNS=10.1.100.2
+FallbackDNS=1.1.1.1
+```
+Then restart: `sudo systemctl restart systemd-resolved`
+
+Or per-interface via NetworkManager:
+```bash
+nmcli connection modify "your-connection" ipv4.dns "10.1.100.2 1.1.1.1"
+nmcli connection up "your-connection"
+```
+
+---
+
+### Verify resolution after setup
+
+```bash
+# Should return the local Pangolin IP, not a public IP
+nslookup app.example.com
+
+# Check which DNS server answered
+nslookup app.example.com 10.1.100.2
+```
+
+If `nslookup` returns the `PANGOLIN_LOCAL_IP` you configured, everything is working.
 
 ## License
 

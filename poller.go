@@ -8,13 +8,16 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
 type Poller struct {
-	cfg    *Config
-	store  *RecordStore
-	client *http.Client
+	cfg        *Config
+	store      *RecordStore
+	client     *http.Client
+	lastPoll   atomic.Value // stores time.Time
+	pollErrors atomic.Int64
 }
 
 // API response types
@@ -77,15 +80,18 @@ func (p *Poller) poll() {
 	orgIDs, err := p.getOrgIDs()
 	if err != nil {
 		log.Printf("poller: failed to get org IDs: %v", err)
+		p.pollErrors.Add(1)
 		return
 	}
 
 	records := make(map[string]string)
+	hasError := false
 
 	for _, orgID := range orgIDs {
 		domains, err := p.getDomainsForOrg(orgID)
 		if err != nil {
 			log.Printf("poller: failed to get resources for org %s: %v", orgID, err)
+			hasError = true
 			continue
 		}
 
@@ -103,7 +109,12 @@ func (p *Poller) poll() {
 		}
 	}
 
+	if hasError {
+		p.pollErrors.Add(1)
+	}
+
 	p.store.Update(records)
+	p.lastPoll.Store(time.Now())
 	log.Printf("poller: updated %d DNS records from %d org(s)", len(records), len(orgIDs))
 }
 
@@ -168,8 +179,9 @@ func (p *Poller) getDomainsForOrg(orgID string) ([]string, error) {
 			}
 		}
 
-		// Check if there are more pages
-		if len(resp.Data.Resources) < pageSize {
+		// Break when all resources have been fetched (use API total to avoid
+		// fetching an extra empty page when results are exactly a multiple of pageSize).
+		if resp.Data.Pagination.Total == 0 || len(allDomains) >= resp.Data.Pagination.Total {
 			break
 		}
 		page++
