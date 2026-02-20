@@ -50,7 +50,7 @@ func TestPoller_ParsesDomainsFromAPI(t *testing.T) {
 
 	store := NewRecordStore()
 	poller := NewPoller(newTestConfig(srv.URL), store)
-	poller.poll()
+	poller.Poll()
 
 	// "app.example.com." should resolve
 	if _, ok := store.Lookup("app.example.com."); !ok {
@@ -80,7 +80,7 @@ func TestPoller_APIError_DoesNotClearStore(t *testing.T) {
 	cfg := newTestConfig(srv.URL)
 	cfg.PangolinOrgID = "org1" // skip /v1/orgs call
 	poller := NewPoller(cfg, store)
-	poller.poll()
+	poller.Poll()
 
 	// store should be cleared (poll() always calls Update, even on org-level errors)
 	// but error counter should be incremented
@@ -112,7 +112,7 @@ func TestPoller_OrgIDConfig_SkipsOrgDiscovery(t *testing.T) {
 	cfg.PangolinOrgID = "myorg"
 	store := NewRecordStore()
 	poller := NewPoller(cfg, store)
-	poller.poll()
+	poller.Poll()
 
 	if orgsHit {
 		t.Error("should not call /v1/orgs when PANGOLIN_ORG_ID is set")
@@ -160,7 +160,7 @@ func TestPoller_Pagination_UsesTotal(t *testing.T) {
 
 	store := NewRecordStore()
 	poller := NewPoller(newTestConfig(srv.URL), store)
-	poller.poll()
+	poller.Poll()
 
 	if calls != 1 {
 		t.Errorf("expected exactly 1 resources API call, got %d", calls)
@@ -194,7 +194,7 @@ func TestPoller_LastPollSet(t *testing.T) {
 	}
 
 	before := time.Now()
-	poller.poll()
+	poller.Poll()
 	after := time.Now()
 
 	raw := poller.lastPoll.Load()

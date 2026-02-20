@@ -61,7 +61,7 @@ Client DNS query: google.com
    PANGOLIN_API_KEY=your_api_key_id.your_api_key_secret
    ```
 
-2. Start the container:
+2. Start the container (pulls the pre-built image from GHCR automatically):
    ```bash
    docker compose up -d
    ```
@@ -138,6 +138,22 @@ The health response looks like:
 ```
 
 `records` should be > 0 after the first poll (within a few seconds of startup).
+
+**Other useful endpoints:**
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/healthz` | GET | Service health, record count, last poll time |
+| `/domains` | GET | List all currently active DNS records |
+| `/poll` | POST | Trigger an immediate re-poll of the Pangolin API |
+
+```bash
+# See which domains are registered
+curl http://<host-ip>:8080/domains
+
+# Force immediate update after adding a new Pangolin service
+curl -X POST http://<host-ip>:8080/poll
+```
 
 ---
 

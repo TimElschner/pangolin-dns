@@ -1,6 +1,7 @@
 services:
   pangolin-dns:
-    build: .
+    image: ghcr.io/timelschner/pangolin-dns:latest
+    # build: .  # uncomment to build locally instead of pulling from GHCR
     container_name: pangolin-dns
     restart: unless-stopped
     ports:

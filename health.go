@@ -28,6 +28,8 @@ type healthResponse struct {
 func (h *HealthServer) Run(ctx context.Context) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.handleHealth)
+	mux.HandleFunc("/poll", h.handlePoll)
+	mux.HandleFunc("/domains", h.handleDomains)
 
 	srv := &http.Server{
 		Addr:    ":" + h.cfg.HealthPort,
@@ -59,4 +61,33 @@ func (h *HealthServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// handlePoll triggers an immediate re-poll of the Pangolin API and returns
+// the updated health status. Only accepts POST requests.
+func (h *HealthServer) handlePoll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Println("health: manual poll triggered")
+	h.poller.Poll()
+
+	h.handleHealth(w, r)
+}
+
+// handleDomains returns the list of DNS records currently held in the store.
+func (h *HealthServer) handleDomains(w http.ResponseWriter, r *http.Request) {
+	type domainsResponse struct {
+		Domains []string `json:"domains"`
+	}
+
+	domains := h.store.Domains()
+	if domains == nil {
+		domains = []string{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(domainsResponse{Domains: domains})
 }

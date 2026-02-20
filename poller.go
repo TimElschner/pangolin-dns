@@ -60,7 +60,7 @@ func NewPoller(cfg *Config, store *RecordStore) *Poller {
 
 // Run starts the polling loop. It polls immediately on start, then every PollInterval.
 func (p *Poller) Run(ctx context.Context) {
-	p.poll()
+	p.Poll()
 
 	ticker := time.NewTicker(p.cfg.PollInterval)
 	defer ticker.Stop()
@@ -71,12 +71,14 @@ func (p *Poller) Run(ctx context.Context) {
 			log.Println("poller: shutting down")
 			return
 		case <-ticker.C:
-			p.poll()
+			p.Poll()
 		}
 	}
 }
 
-func (p *Poller) poll() {
+// Poll fetches all domains from the Pangolin API and updates the record store.
+// It is safe to call concurrently from the HTTP handler and the polling loop.
+func (p *Poller) Poll() {
 	orgIDs, err := p.getOrgIDs()
 	if err != nil {
 		log.Printf("poller: failed to get org IDs: %v", err)
